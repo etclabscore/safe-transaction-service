@@ -43,3 +43,10 @@ class BinanceClient:
         :raises: CannotGetPrice
         """
         return self._get_price("MATICUSDT")
+
+    def get_etc_usd_price(self) -> float:
+        """
+        :return: current USD price for ETC
+        :raises: CannotGetPrice
+        """
+        return self._get_price("ETCUSDT")
