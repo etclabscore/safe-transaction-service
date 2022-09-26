@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional, OrderedDict, Sequence
 
 from django.conf import settings
 
-import gevent
 from eth_typing import ChecksumAddress
 from eth_utils import event_abi_to_log_topic
 from hexbytes import HexBytes
@@ -40,7 +39,9 @@ class EventsIndexer(EthereumIndexer):
         kwargs.setdefault(
             "blocks_to_reindex_again", 10
         )  # Reindex last 10 blocks every run of the indexer
-        kwargs.setdefault("query_chunk_size", settings.ETH_EVENTS_QUERY_CHUNK_SIZE)
+        kwargs.setdefault(
+            "query_chunk_size", settings.ETH_EVENTS_QUERY_CHUNK_SIZE
+        )  # Number of elements to process together when calling `eth_getLogs`
         kwargs.setdefault(
             "updated_blocks_behind", settings.ETH_EVENTS_UPDATED_BLOCK_BEHIND
         )  # For last x blocks, consider them almost updated and process them first
@@ -93,19 +94,18 @@ class EventsIndexer(EthereumIndexer):
                 for addresses_chunk in addresses_chunks
             ]
 
-            jobs = [
-                gevent.spawn(
-                    self.ethereum_client.slow_w3.eth.get_logs, single_parameters
-                )
-                for single_parameters in multiple_parameters
-            ]
-            _ = gevent.joinall(jobs)
             log_receipts = []
-            for job in jobs:
-                log_receipts.extend(job.get())
+
+            for single_parameters in multiple_parameters:
+                with self.auto_adjust_block_limit(from_block_number, to_block_number):
+                    log_receipts.extend(
+                        self.ethereum_client.slow_w3.eth.get_logs(single_parameters)
+                    )
+
             return log_receipts
         else:
-            return self.ethereum_client.slow_w3.eth.get_logs(parameters)
+            with self.auto_adjust_block_limit(from_block_number, to_block_number):
+                return self.ethereum_client.slow_w3.eth.get_logs(parameters)
 
     def _find_elements_using_topics(
         self,
