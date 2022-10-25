@@ -90,6 +90,10 @@ ENV/
 env.bak/
 venv.bak/
 
+# Actual env files generated from Makefile and passed in docker-compose
+.env.classic
+.env.mordor
+
 # Spyder project settings
 .spyderproject
 .spyproject
