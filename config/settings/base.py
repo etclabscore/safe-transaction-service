@@ -44,6 +44,9 @@ FORCE_SCRIPT_NAME = env("FORCE_SCRIPT_NAME", default=None)
 # SSO
 SSO_ENABLED = False
 
+# Enable analytics endpoints
+ENABLE_ANALYTICS = env("ENABLE_ANALYTICS", default=False)
+
 # DATABASES
 # ------------------------------------------------------------------------------
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
@@ -90,9 +93,11 @@ THIRD_PARTY_APPS = [
     "rest_framework.authtoken",
 ]
 LOCAL_APPS = [
+    "safe_transaction_service.analytics.apps.AnalyticsConfig",
     "safe_transaction_service.contracts.apps.ContractsConfig",
     "safe_transaction_service.history.apps.HistoryConfig",
     "safe_transaction_service.notifications.apps.NotificationsConfig",
+    "safe_transaction_service.safe_messages.apps.SafeMessagesConfig",
     "safe_transaction_service.tokens.apps.TokensConfig",
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
@@ -230,13 +235,41 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {}
 CELERY_ROUTES = (
     [
         (
-            "safe_transaction_service.history.tasks.send_webhook_task",
-            {"queue": "webhooks"},
+            "safe_transaction_service.history.tasks.retry_get_metadata_task",
+            {"queue": "tokens", "delivery_mode": "transient"},
         ),
-        ("safe_transaction_service.history.tasks.*", {"queue": "indexing"}),
-        ("safe_transaction_service.contracts.tasks.*", {"queue": "contracts"}),
-        ("safe_transaction_service.notifications.tasks.*", {"queue": "notifications"}),
-        ("safe_transaction_service.tokens.tasks.*", {"queue": "tokens"}),
+        (
+            "safe_transaction_service.history.tasks.send_webhook_task",
+            {"queue": "webhooks, 'delivery_mode': 'transient'"},
+        ),
+        (
+            "safe_transaction_service.history.tasks.reindex_mastercopies_last_hours_task",
+            {"queue": "indexing"},
+        ),
+        (
+            "safe_transaction_service.history.tasks.reindex_erc20_erc721_last_hours_task",
+            {"queue": "indexing"},
+        ),
+        (
+            "safe_transaction_service.history.tasks.*",
+            {"queue": "indexing", "delivery_mode": "transient"},
+        ),
+        (
+            "safe_transaction_service.contracts.tasks.*",
+            {"queue": "contracts", "delivery_mode": "transient"},
+        ),
+        (
+            "safe_transaction_service.notifications.tasks.*",
+            {"queue": "notifications", "delivery_mode": "transient"},
+        ),
+        (
+            "safe_transaction_service.tokens.tasks.*",
+            {"queue": "tokens", "delivery_mode": "transient"},
+        ),
+        (
+            "safe_transaction_service.analytics.tasks.*",
+            {"queue": "contracts", "delivery_mode": "transient"},
+        ),
     ],
 )
 
@@ -367,14 +400,31 @@ REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 # Ethereum RPC
 # ------------------------------------------------------------------------------
 ETHEREUM_NODE_URL = env("ETHEREUM_NODE_URL", default=None)
+
+# Tracing indexing configuration (not useful for L2 indexing)
+# ------------------------------------------------------------------------------
 ETHEREUM_TRACING_NODE_URL = env("ETHEREUM_TRACING_NODE_URL", default=None)
 ETH_INTERNAL_TXS_BLOCK_PROCESS_LIMIT = env.int(
     "ETH_INTERNAL_TXS_BLOCK_PROCESS_LIMIT", default=10_000
 )
-ETH_INTERNAL_NO_FILTER = env.bool("ETH_INTERNAL_NO_FILTER", default=False)
+ETH_INTERNAL_TXS_BLOCKS_TO_REINDEX_AGAIN = env.int(
+    "ETH_INTERNAL_TXS_BLOCKS_TO_REINDEX_AGAIN", default=6
+)
+ETH_INTERNAL_TXS_NUMBER_TRACE_BLOCKS = env.int(
+    "ETH_INTERNAL_TXS_NUMBER_TRACE_BLOCKS", default=10
+)  # Use `trace_block` for last `number_trace_blocks` blocks indexing
+ETH_INTERNAL_NO_FILTER = env.bool(
+    "ETH_INTERNAL_NO_FILTER", default=False
+)  # Don't use `trace_filter`, only `trace_block` and `trace_transaction`
 ETH_INTERNAL_TRACE_TXS_BATCH_SIZE = env.int(
     "ETH_INTERNAL_TRACE_TXS_BATCH_SIZE", default=0
-)
+)  # Number of `trace_transaction` calls allowed in the same RPC batch call, as results can be quite big
+ETH_INTERNAL_TX_DECODED_PROCESS_BATCH = env.int(
+    "ETH_INTERNAL_TX_DECODED_PROCESS_BATCH", default=500
+)  # Number of InternalTxDecoded to process together. Keep it low to be memory friendly
+
+# Event indexing configuration (L2 and ERC20/721)
+# ------------------------------------------------------------------------------
 ETH_L2_NETWORK = env.bool(
     "ETH_L2_NETWORK", default=not ETHEREUM_TRACING_NODE_URL
 )  # Use L2 event indexing
@@ -384,6 +434,12 @@ ETH_EVENTS_BLOCK_PROCESS_LIMIT = env.int(
 ETH_EVENTS_BLOCK_PROCESS_LIMIT_MAX = env.int(
     "ETH_EVENTS_BLOCK_PROCESS_LIMIT_MAX", default=0
 )  # Maximum number of blocks to process together when searching for events. 0 == no limit.
+ETH_EVENTS_BLOCKS_TO_REINDEX_AGAIN = env.int(
+    "ETH_EVENTS_BLOCKS_TO_REINDEX_AGAIN", default=10
+)  # Blocks to reindex again every indexer run when service is synced. Useful for RPCs not reliable
+ETH_EVENTS_GET_LOGS_CONCURRENCY = env.int(
+    "ETH_EVENTS_GET_LOGS_CONCURRENCY", default=20
+)  # Number of concurrent requests to `getLogs`
 ETH_EVENTS_QUERY_CHUNK_SIZE = env.int(
     "ETH_EVENTS_QUERY_CHUNK_SIZE", default=1_000
 )  # Number of addresses to use as `getLogs` parameter. `0 == no limit`. By testing `1_000` looks like a good default
@@ -396,10 +452,17 @@ ETH_REORG_BLOCKS = env.int(
 
 # Tokens
 # ------------------------------------------------------------------------------
-TOKENS_LOGO_BASE_URI = env(
-    "TOKENS_LOGO_BASE_URI", default="https://gnosis-safe-token-logos.s3.amazonaws.com/"
+TOKENS_LOGO_BASE_URI = env.str(
+    "TOKENS_LOGO_BASE_URI", default="https://tokens-logo.localhost/"
+)  # Used if AWS_S3_PUBLIC_URL is not defined
+TOKENS_LOGO_EXTENSION = env.str("TOKENS_LOGO_EXTENSION", default=".png")
+TOKENS_ENS_IMAGE_URL = env.str(
+    "TOKENS_ENS_IMAGE_URL",
+    default="https://safe-transaction-assets.safe.global/tokens/logos/ENS.png",
 )
-TOKENS_LOGO_EXTENSION = env("TOKENS_LOGO_EXTENSION", default=".png")
+TOKENS_ERC20_GET_BALANCES_BATCH = env.int(
+    "TOKENS_ERC20_GET_BALANCES_BATCH", default=2_000
+)  # Number of tokens to get balances from in the same request. From 2_500 some nodes raise HTTP 413
 
 # Notifications
 # ------------------------------------------------------------------------------

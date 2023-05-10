@@ -7,7 +7,7 @@ from .exceptions import CannotGetPrice
 logger = logging.getLogger(__name__)
 
 
-class BinanceClient:
+class BinanceClient:  # pragma: no cover
     def __init__(self):
         self.http_session = requests.Session()
 
@@ -36,7 +36,7 @@ class BinanceClient:
     def get_bnb_usd_price(self) -> float:
         return self._get_price("BNBUSDT")
 
-    def get_eth_usd_price(self) -> float:
+    def get_ether_usd_price(self) -> float:
         """
         :return: current USD price for Ethereum
         :raises: CannotGetPrice

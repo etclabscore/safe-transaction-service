@@ -20,24 +20,9 @@ urlpatterns = [
         "about/master-copies/", views.MasterCopiesView.as_view(), name="master-copies"
     ),
     path(
-        "about/erc20-indexing/",
-        views.ERC20IndexingView.as_view(),
-        name="erc20-indexing",
-    ),
-    path(
         "about/indexing/",
         views.IndexingView.as_view(),
         name="indexing",
-    ),
-    path(
-        "analytics/multisig-transactions/by-safe/",
-        views.AnalyticsMultisigTxsBySafeListView.as_view(),
-        name="analytics-multisig-txs-by-safe",
-    ),
-    path(
-        "analytics/multisig-transactions/by-origin/",
-        views.AnalyticsMultisigTxsByOriginListView.as_view(),
-        name="analytics-multisig-txs-by-origin",
     ),
     path("data-decoder/", views.DataDecoderView.as_view(), name="data-decoder"),
     path("delegates/", views.DelegateListView.as_view(), name="delegates"),
@@ -78,6 +63,16 @@ urlpatterns = [
         name="transfers",
     ),
     path(
+        "transfer/<str:transfer_id>",
+        views.TransferView.as_view(),
+        name="transfer",
+    ),
+    path(
+        "module-transaction/<str:module_transaction_id>",
+        views.ModuleTransactionView.as_view(),
+        name="module-transaction",
+    ),
+    path(
         "safes/<str:address>/module-transactions/",
         views.SafeModuleTransactionListView.as_view(),
         name="module-transactions",
@@ -96,11 +91,6 @@ urlpatterns = [
         "safes/<str:address>/balances/usd/",
         views.SafeBalanceUsdView.as_view(),
         name="safe-balances-usd",
-    ),
-    path(
-        "safes/<str:address>/collectibles/",
-        views.SafeCollectiblesView.as_view(),
-        name="safe-collectibles",
     ),
     path(
         "safes/<str:address>/delegates/",

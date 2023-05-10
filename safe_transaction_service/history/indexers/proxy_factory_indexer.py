@@ -2,7 +2,7 @@ from functools import cached_property
 from logging import getLogger
 from typing import List, Optional, Sequence
 
-from web3.contract import ContractEvent
+from web3.contract.contract import ContractEvent
 from web3.types import EventData, LogReceipt
 
 from gnosis.eth import EthereumClient
@@ -68,11 +68,9 @@ class ProxyFactoryIndexer(EventsIndexer):
                 logger.error(log_msg)
                 raise ValueError(log_msg)
 
-            blocks_one_day = int(24 * 60 * 60 / 15)  # 15 seconds block
             return SafeContract(
                 address=contract_address,
                 ethereum_tx_id=decoded_element["transactionHash"],
-                erc20_block_number=max(block_number - blocks_one_day, 0),
             )
 
     def process_elements(
