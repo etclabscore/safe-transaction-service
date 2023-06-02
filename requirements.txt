@@ -32,4 +32,4 @@ psycopg2==2.9.6
 redis==4.5.5
 requests==2.31.0
 safe-eth-py[django]==5.4.3
-web3==6.4.0
+git+https://github.com/ethereum/web3.py@main#egg=web3
